@@ -8,6 +8,8 @@
 
 > 独立开源项目，与 Google 无关联。首版为预览版；Gemini 页面结构、Android App 的无障碍支持可能随版本变化。预览图为本地演示，不能代表已登录账号的兼容性测试。
 
+0.1.1 已在官方未登录 Gemini 网页完成 20 轮真实会话的目录、搜索和跳转验证，并修复隐藏无障碍标题导致提问重复的问题。[实测截图与范围](docs/TESTING.md#011-网页兼容修复)。Android 官方 App 的真机验证仍待完成。
+
 | | Windows 网页扩展 | Android 配套 APK |
 |---|---|---|
 | 使用位置 | `https://gemini.google.com/` | 官方 Gemini Android App |

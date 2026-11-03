@@ -1,0 +1,14 @@
+{
+  "startedAt": "2026-11-03T14:57:55.999Z",
+  "source": "Live https://gemini.google.com/app; no interception or injected messages",
+  "signedIn": false,
+  "roundsRequested": 20,
+  "roundsCompleted": 20,
+  "checks": [
+    "Every generated prompt appears exactly once, in order, without hidden accessibility copies.",
+    "Search from the end and click brings the second live prompt into the viewport.",
+    "Latest and earliest controls scroll real conversation nodes into view."
+  ],
+  "passed": true,
+  "finishedAt": "2026-11-03T15:11:39.268Z"
+}
