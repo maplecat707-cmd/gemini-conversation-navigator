@@ -10,7 +10,7 @@ import static org.junit.Assert.*;
 import static org.robolectric.Shadows.shadowOf;
 
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = 28)
+@Config(sdk = {28, 35})
 public class ScreenReaderTest {
     private AccessibilityNodeInfo node(String text, String clazz, int top, int height) {
         AccessibilityNodeInfo node = AccessibilityNodeInfo.obtain();

@@ -8,7 +8,10 @@ permissions:
   contents: read
 jobs:
   extension:
-    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -17,15 +20,20 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - run: npm run check && npm test && npm run package
+        if: runner.os == 'Linux'
+      - run: npx playwright install chromium
+        if: runner.os == 'Windows'
+      - run: npm run check
+      - run: npm test
+      - run: python scripts/package-extension.py
       - uses: actions/upload-artifact@v4
         with:
-          name: chrome-edge-extension
+          name: chrome-edge-extension-${{ runner.os }}
           path: dist/*.zip
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: browser-test-traces
+          name: browser-test-traces-${{ runner.os }}
           path: test-results/
   android:
     runs-on: ubuntu-24.04

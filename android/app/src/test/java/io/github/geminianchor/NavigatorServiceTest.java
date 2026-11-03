@@ -22,7 +22,7 @@ import static org.robolectric.Shadows.shadowOf;
 
 /** Drives the actual service with paginated accessibility windows, no Gemini account. */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = 28)
+@Config(sdk = {28, 35})
 public class NavigatorServiceTest {
     private NavigatorService service;
     private AccessibilityNodeInfo root, text, scroller;
