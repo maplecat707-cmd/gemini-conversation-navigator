@@ -6,7 +6,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 EXT = ROOT / "extension"
-version = json.loads((EXT / "manifest.json").read_text())["version"]
+version = json.loads((EXT / "manifest.json").read_text(encoding="utf-8"))["version"]
 out = ROOT / "dist"
 out.mkdir(exist_ok=True)
 archive = out / f"gemini-anchor-chrome-edge-{version}.zip"

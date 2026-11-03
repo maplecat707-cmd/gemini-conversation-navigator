@@ -25,7 +25,7 @@ jobs:
         if: runner.os == 'Windows'
       - run: npm run check
       - run: npm test
-      - run: python scripts/package-extension.py
+      - run: npm run package
       - uses: actions/upload-artifact@v4
         with:
           name: chrome-edge-extension-${{ runner.os }}

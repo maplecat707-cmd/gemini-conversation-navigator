@@ -2,6 +2,16 @@
 
 本文件记录测试能证明的范围，不把本地演示数据当作官方 Gemini 兼容性证据。
 
+## 2026-11-03 预览版验证记录
+
+- 网页扩展：8 个场景在 Linux Chromium、Windows Server 2022 Chromium 各运行一次，均通过；测试实际安装了扩展。
+- Android：4 个纯 Java 索引测试，以及 7 个节点／服务场景在 Android API 28、35 的 Robolectric 环境各执行一次，共 18 个测试，全部通过。
+- Android debug、release 构建通过；Lint 没有错误，有 4 条非阻断警告（旧系统忽略无障碍工具标记、建议提供 Android 12 备份规则、两条中文 UI 文案国际化建议）。对话内容不写入磁盘，`allowBackup=false`。
+- 发布 APK 使用项目专用 RSA 3072 签名，`apksigner verify` 验证 v2／v3 签名。检查 APK Manifest 确认没有 `INTERNET` 权限。
+- 最终工作流结果见 [GitHub Actions](https://github.com/maplecat707-cmd/gemini-conversation-navigator/actions)，发布文件校验值见 Releases 中的 `SHA256SUMS.txt`。
+
+官方 App 真机及登录后的在线 Gemini 兼容性仍待验证，详见下文。
+
 ## 网页扩展
 
 `npm test` 使用 Playwright，在真实 Chromium 中安装仓库里的 Manifest V3 扩展。浏览器请求的 `https://gemini.google.com/app/...` 被测试夹具拦截，不访问账号。
@@ -17,7 +27,7 @@
 - Escape、窄屏布局、窄屏点击后收起。
 - 深色模式、无提问状态；生成 `web-preview.png` 供视觉检查。
 
-已验证 DOM 形式为 `user-query`、`.query-text` 等 Gemini 常见结构。还支持 `[data-message-author-role="user"]` 与 `.user-query-container`。**未使用真实登录账号验证当前在线 Gemini 的所有页面版本。** Canvas、嵌入式页面、共享页及实验版布局没有专门适配。扩展在 Linux Chromium 中测试，Windows Chrome／Edge 使用相同扩展 API，但不等于已在每个 Windows 浏览器版本上实测。
+已验证 DOM 形式为 `user-query`、`.query-text` 等 Gemini 常见结构。还支持 `[data-message-author-role="user"]` 与 `.user-query-container`。**未使用真实登录账号验证当前在线 Gemini 的所有页面版本。** Canvas、嵌入式页面、共享页及实验版布局没有专门适配。扩展在 Linux 和 Windows Chromium 中测试；Chrome／Edge 使用相同扩展 API，但不等于已在每个浏览器版本上实测。
 
 ## Android
 

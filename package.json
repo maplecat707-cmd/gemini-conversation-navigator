@@ -6,7 +6,7 @@
   "scripts": {
     "test": "playwright test",
     "check": "node --check extension/src/content.js && node --check extension/src/background.js",
-    "package": "python3 scripts/package-extension.py"
+    "package": "node scripts/package-extension.mjs"
   },
   "devDependencies": { "@playwright/test": "1.58.2" }
 }
