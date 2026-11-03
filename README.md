@@ -19,7 +19,7 @@
 
 ## Windows：Chrome / Edge
 
-1. 从 [Releases](https://github.com/maplecat707-cmd/gemini-conversation-navigator/releases) 下载 `gemini-anchor-chrome-edge-0.1.0.zip`，解压到一个固定文件夹。
+1. 从 [Releases](https://github.com/maplecat707-cmd/gemini-conversation-navigator/releases) 下载 `gemini-anchor-chrome-edge-0.1.1.zip`，解压到一个固定文件夹。
 2. Chrome 打开 `chrome://extensions`；Edge 打开 `edge://extensions`。开启「开发者模式」。
 3. 点击「加载已解压的扩展程序」，选择包含 `manifest.json` 的文件夹。
 4. 打开或刷新 Gemini 对话，点击右侧「目录」。可用 `Alt+Shift+G` 或浏览器工具栏图标展开／收起。

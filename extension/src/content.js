@@ -64,6 +64,14 @@
     try { chrome.storage.local.set({ anchorOpen: value }).catch(() => {}); } catch { /* Test/extension reload. */ }
   }
   function status(message) { $('.status').textContent = message; }
+  function queryText(node) {
+    const copy = node.cloneNode(true);
+    // Live Gemini repeats the entire prompt in a hidden "You said" heading.
+    // Strip accessibility-only copies from our clone, never from Gemini itself.
+    copy.querySelectorAll('button,mat-icon,[role="button"],svg,script,style,[hidden],[aria-hidden="true"],.cdk-visually-hidden,.screen-reader-user-query-label').forEach((el) => el.remove());
+    copy.querySelectorAll('p,div,li,pre,br,.query-text-line').forEach((el) => el.after(document.createTextNode('\n')));
+    return copy.textContent;
+  }
   function readQueries() {
     const candidates = [...document.querySelectorAll(QUERY_SELECTOR)];
     return candidates.filter((node) => !candidates.some((other) => other !== node && other.contains(node)))
@@ -71,11 +79,9 @@
       .map((node) => {
         const parts = [...node.querySelectorAll(TEXT_SELECTOR)];
         const outer = parts.filter((part) => !parts.some((other) => other !== part && other.contains(part)));
-        let text = normalize(outer.map((part) => part.textContent).join('\n'));
+        let text = normalize(outer.map(queryText).join('\n'));
         if (!text) {
-          const copy = node.cloneNode(true);
-          copy.querySelectorAll('button,mat-icon,[role="button"],svg,script,style').forEach((el) => el.remove());
-          text = normalize(copy.textContent);
+          text = normalize(queryText(node));
         }
         return { node, text: text || '图片或附件提问' };
       });

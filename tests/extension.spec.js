@@ -53,6 +53,18 @@ test('client-side conversation change clears old entries and filter', async () =
   await expect(page.locator('.entry')).toHaveCount(1); await expect(page.locator('.entry')).toContainText('新的对话');
   await expect(page.getByRole('searchbox')).toHaveValue('');
 });
+test('live Gemini screen-reader headings do not duplicate prompt text', async () => {
+  await page.evaluate(() => {
+    const node = document.createElement('user-query');
+    node.innerHTML = '<span class="user-query-container"><user-query-content class="user-query-container"><div class="query-text"><h5 class="cdk-visually-hidden screen-reader-user-query-label"><span>You said</span> Navigation check 01.</h5><p class="query-text-line">Navigation check 01.</p><p class="query-text-line">Second line.</p><span aria-hidden="true">Decorative label</span></div><button>Copy prompt</button></user-query-content></span>';
+    document.querySelector('.chat').append(node);
+  });
+  await expect(page.locator('.entry')).toHaveCount(13);
+  await expect(page.locator('.entry').last().locator('.title')).toHaveText('Navigation check 01. Second line.');
+  await expect(page.locator('.entry').last()).toHaveAttribute('title', 'Navigation check 01. Second line.');
+  // The screen-reader label in Gemini must remain untouched.
+  await expect(page.locator('user-query h5')).toHaveText('You said Navigation check 01.');
+});
 test('load earlier reveals lazy history and restores reading position', async () => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.locator('.entry').nth(8).click();

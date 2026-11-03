@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Gemini 对话目录 · Gemini Anchor",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "为 Gemini 长对话添加可搜索的侧边目录，点击提问回到原位置。仅本机处理。",
   "permissions": ["storage"],
   "icons": { "16": "icons/16.png", "48": "icons/48.png", "128": "icons/128.png" },
