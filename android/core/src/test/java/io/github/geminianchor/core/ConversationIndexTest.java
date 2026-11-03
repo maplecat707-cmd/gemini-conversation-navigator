@@ -1,0 +1,46 @@
+package io.github.geminianchor.core;
+
+import org.junit.Test;
+import java.util.List;
+import static org.junit.Assert.*;
+
+public class ConversationIndexTest {
+    private List<String> texts(ConversationIndex index) {
+        return index.entries().stream().map(ConversationIndex.Entry::text).collect(java.util.stream.Collectors.toList());
+    }
+    @Test public void upwardScanPrependsOverlappingEarlierViewports() {
+        ConversationIndex index = new ConversationIndex();
+        index.merge(List.of("第三段", "第四段", "第五段"), -1);
+        long anchor = index.entries().get(0).id();
+        index.merge(List.of("第一段", "第二段", "第三段"), -1);
+        assertEquals(List.of("第一段", "第二段", "第三段", "第四段", "第五段"), texts(index));
+        assertEquals(anchor, index.entries().get(2).id());
+        index.merge(List.of("第二段", "第三段"), -1);
+        assertEquals(5, index.entries().size());
+    }
+    @Test public void repeatedQuestionsRetainSeparateAnchors() {
+        ConversationIndex index = new ConversationIndex();
+        index.merge(List.of("继续", "回答甲", "继续", "回答乙"), 1);
+        assertEquals(4, index.entries().size());
+        assertNotEquals(index.entries().get(0).id(), index.entries().get(2).id());
+        index.merge(List.of("继续", "回答乙", "最后"), 1);
+        assertEquals(List.of("继续", "回答甲", "继续", "回答乙", "最后"), texts(index));
+    }
+    @Test public void detachedPagesKeepScanDirectionAndSearchNormalizes() {
+        ConversationIndex index = new ConversationIndex();
+        index.merge(List.of("  Hello\n WORLD ", "尾部"), -1);
+        index.merge(List.of("开头"), -1);
+        index.merge(List.of("追加"), 1);
+        assertEquals(List.of("开头", "Hello WORLD", "尾部", "追加"), texts(index));
+        assertEquals("Hello WORLD", index.search("hello world").get(0).text());
+        assertTrue(index.search("不存在").isEmpty());
+        index.clear(); assertTrue(index.entries().isEmpty());
+    }
+    @Test public void emptyPagesAndBlankNodesNeverInventEntries() {
+        ConversationIndex index = new ConversationIndex();
+        index.merge(List.of("", " \n "), 1);
+        assertTrue(index.entries().isEmpty());
+        index.merge(List.of("一段"), 1); index.merge(List.of(), -1);
+        assertEquals(List.of("一段"), texts(index));
+    }
+}

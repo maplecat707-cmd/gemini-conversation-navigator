@@ -1,0 +1,12 @@
+{
+  "name": "gemini-conversation-navigator",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local conversation navigation for Gemini on Android and Chrome/Edge",
+  "scripts": {
+    "test": "playwright test",
+    "check": "node --check extension/src/content.js && node --check extension/src/background.js",
+    "package": "python3 scripts/package-extension.py"
+  },
+  "devDependencies": { "@playwright/test": "1.58.2" }
+}

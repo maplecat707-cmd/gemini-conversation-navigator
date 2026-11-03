@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gemini Anchor · 本地演示</title>
+<style>
+  *{box-sizing:border-box}body{margin:0;background:#fff;color:#303b34;font:15px/1.85 "Segoe UI","Microsoft YaHei",sans-serif}
+  .rail{position:fixed;inset:0 auto 0 0;width:220px;background:#f5f6f3;padding:30px 22px}.logo{font-size:23px;letter-spacing:-1px;color:#506d50}.new{margin-top:35px;border:1px solid #e1e6dc;border-radius:25px;padding:10px 20px;font-size:13px;display:inline-block}.history{margin-top:38px;color:#7e877b;font-size:12px}.current{margin:14px -10px;padding:10px;border-radius:10px;background:#e8eee2;font-size:13px}
+  .top{position:fixed;top:0;left:220px;right:0;height:80px;background:#ffffffee;display:flex;align-items:center;justify-content:space-between;padding:0 40px;z-index:1}.top span{font-size:12px;color:#809078;border:1px solid #e3e8df;border-radius:8px;padding:4px 12px}.top strong{font-size:17px;font-weight:500}.chat{position:fixed;left:220px;top:80px;right:380px;bottom:80px;overflow-y:auto;scrollbar-width:none;padding:10px 35px 80px}.conversation-container{max-width:720px;margin:auto;padding-bottom:38px}user-query{display:block;margin:22px 0 24px 70px;background:#f0f3eb;border-radius:19px;padding:14px 22px;color:#43533c}.answer{padding:0 6px}.sparkle{font-size:21px;color:#6f8d67}.answer p{margin:10px 0 15px}.answer h3{font-size:17px;font-weight:600}.answer ul{padding-left:22px}.answer li{padding:4px 0}.source{font-size:11px;color:#87917f;margin-top:18px}.composer{position:fixed;bottom:20px;left:270px;right:415px;background:#f4f6f0;border:1px solid #e5eadd;border-radius:28px;color:#95a08b;padding:14px 25px;font-size:13px}.demo-label{font-size:10px;color:#98a38f}
+  @media(max-width:900px){.rail{display:none}.top{left:0}.chat{left:0;right:0;padding:0 20px}.composer{left:20px;right:20px}}
+</style>
+<aside class="rail"><div class="logo">Gemini <small class="demo-label">演示页面</small></div><div class="new">＋ 开始新对话</div><div class="history">最近的对话</div><div class="current">京都五日旅行计划</div><div class="history">本页内容为测试数据，<br>不是 Google 官方页面。</div></aside>
+<div class="top"><strong>京都五日旅行计划</strong><span>本地交互演示</span></div>
+<main class="chat" aria-label="对话内容"></main><div class="composer">向 Gemini 提问…</div>
+<script>
+  const prompts = ['帮我规划一次京都五日旅行', '什么时候去最合适？想避开人流', '住宿选京都站还是四条河原町？', '第一天，从京都站慢慢走到鸭川', '清水寺和祇园怎么安排比较顺路？', '我想留半天逛独立书店和咖啡馆', '岚山有哪些安静一点的步行路线？', '雨天的话，可以换成哪些室内行程？', '帮我整理一份不需要预约的餐厅清单', '交通卡怎么买，预算大概多少？', '把这五天的路线按区域重新整理', '最后给我一份轻量的行前清单'];
+  const answers = [
+    '<h3>让行程留一点空白</h3><p>五天足够把京都的几个主要区域串起来，也能留出坐在河边发呆的时间。建议每天只安排一个主要区域，减少来回换乘。</p><ul><li>第一天：京都站 → 东本愿寺 → 鸭川。</li><li>第二天：清水寺、二年坂、祇园。</li><li>第三天：书店、咖啡馆与城市漫步。</li><li>第四天：岚山及周边步行。</li><li>第五天：锦市场与返程。</li></ul>',
+    '<h3>五月中旬或十一月上旬</h3><p>错开黄金周和红叶高峰，气温舒适，也更容易找到安静的路线。工作日的早晨适合去热门景点，下午则安排街区散步。</p><p>无论哪个季节，都建议预留半天机动时间，应对下雨或临时想多待一会儿的地方。</p>',
+    '<h3>以步行为主，选河原町</h3><p>如果喜欢晚上随意逛街、找小店吃饭，四条河原町更方便。京都站适合携带大件行李、频繁前往大阪或奈良的安排。</p><p>这份五日行程以京都市内为主，可以优先考虑河原町到五条之间，靠近鸭川的住宿。</p>',
+    '<h3>第一天 · 从抵达到慢下来</h3><p>落地后的第一天不必赶景点。从京都站出发，经过东本愿寺，再沿着小街走向鸭川，把节奏调到步行的速度。</p><ul><li><strong>14:00</strong> 到达住宿，放下行李。</li><li><strong>15:00</strong> 东本愿寺周边散步。</li><li><strong>16:30</strong> 找一家咖啡馆休息。</li><li><strong>17:30</strong> 沿鸭川走到四条，等待日落。</li></ul><p>晚餐就在住宿附近解决。留一点精神，明天早上再出发去清水寺。</p>'
+  ];
+  function addTurn(prompt, i) {
+    const container = document.createElement('section'); container.className = 'conversation-container';
+    const user = document.createElement('user-query'); const text = document.createElement('div'); text.className = 'query-text'; text.textContent = prompt; user.append(text);
+    const answer = document.createElement('div'); answer.className = 'answer'; answer.innerHTML = '<span class="sparkle">✧</span>' + answers[i % answers.length] + '<div class="source">示例回答 · 仅用于展示目录与定位交互</div>';
+    container.append(user, answer); document.querySelector('.chat').append(container);
+  }
+  prompts.forEach(addTurn);
+</script>
+<script src="../extension/src/content.js"></script>
+</html>

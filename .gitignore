@@ -1,0 +1,10 @@
+node_modules/
+dist/
+test-results/
+playwright-report/
+.gradle/
+**/build/
+local.properties
+*.jks
+*.keystore
+.DS_Store
