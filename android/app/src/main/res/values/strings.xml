@@ -2,12 +2,11 @@
     <string name="app_name">Gemini 对话目录</string>
     <string name="service_summary">为 Gemini 长对话提供侧边目录和定位。</string>
     <string name="service_description">仅在你启用后读取 Gemini 的屏幕文字并响应你发起的滚动、定位操作。索引只在内存中；不联网、不保存对话。进入 Google 宿主时需确认 Gemini 页面，不读取其他应用内容。可随时在此关闭服务。</string>
-    <style name="AppTheme" parent="android:style/Theme.Material.Light.NoActionBar">
+    <style name="BaseAppTheme" parent="android:style/Theme.Material.Light.NoActionBar">
         <item name="android:fontFamily">sans</item>
         <item name="android:colorAccent">#50745A</item>
         <item name="android:windowLightStatusBar">true</item>
-        <item name="android:navigationBarColor">#F8FAF6</item>
-        <item name="android:windowLightNavigationBar">true</item>
         <item name="android:windowBackground">#F8FAF6</item>
     </style>
+    <style name="AppTheme" parent="BaseAppTheme" />
 </resources>
