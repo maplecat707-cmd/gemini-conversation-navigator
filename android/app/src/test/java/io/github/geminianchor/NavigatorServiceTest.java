@@ -33,6 +33,7 @@ public class NavigatorServiceTest {
         root = node(null, 0, 1920); root.setPackageName("com.google.android.apps.bard");
         scroller = node(null, 180, 1500); scroller.setScrollable(true);
         page = 9; text = node("段落 9", 220, 250);
+        text.setViewIdResourceName("test:id/user_query");
         shadowOf(root).addChild(scroller); shadowOf(scroller).addChild(text);
         shadowOf(scroller).setOnPerformActionListener((action, args) -> {
             int next = page;
@@ -54,12 +55,12 @@ public class NavigatorServiceTest {
     }
     private ConversationIndex index() { return ReflectionHelpers.getField(service, "index"); }
     private void advance(int seconds) { shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(seconds)); }
-    @Test public void scansEarlierPagesInOrderReturnsAndNavigatesToOldContent() {
+    @Test public void scansEarlierUserPagesInOrderStaysAtEarliestAndNavigates() {
         service.scan(); advance(30);
         assertEquals(10, index().entries().size());
         assertEquals("段落 0", index().entries().get(0).text());
         assertEquals("段落 9", index().entries().get(9).text());
-        assertEquals("scan must return to the starting page", 9, page);
+        assertEquals("scan stays at earliest position to avoid a second slow traversal", 0, page);
         service.seek(index().entries().get(2)); advance(15);
         assertEquals(2, page);
         assertTrue(shadowOf(text).getPerformedActions().contains(AccessibilityNodeInfo.AccessibilityAction.ACTION_SHOW_ON_SCREEN.getId()));
@@ -98,7 +99,7 @@ public class NavigatorServiceTest {
         });
         service.scan(); advance(45);
         assertEquals(10, index().entries().size());
-        assertEquals(9, page);
+        assertEquals(0, page);
     }
     @Test public void historyTakingSeveralSecondsToLoadIsNotTreatedAsTheBeginning() {
         final boolean[] pending = {false};
@@ -115,26 +116,26 @@ public class NavigatorServiceTest {
         });
         service.scan(); advance(120);
         assertEquals(10, index().entries().size());
-        assertEquals(9, page);
+        assertEquals(0, page);
     }
     @Test public void continuingAScanPreservesAlreadyCollectedLaterMessages() {
         service.scan(); advance(2); service.cancel();
         long lastId = index().entries().get(index().entries().size() - 1).id();
-        int resumeFrom = page;
-        service.scan(); advance(35);
+                service.scan(); advance(35);
         assertEquals(10, index().entries().size());
         assertEquals("段落 9", index().entries().get(9).text());
         assertEquals(lastId, index().entries().get(9).id());
-        assertEquals(resumeFrom, page);
+        assertEquals(0, page);
     }
     @Test public void scrollEventsKeepScanningThroughALongUnchangedMessage() {
-        page = 30; text.setText("占据很多屏的同一条回复");
+        page = 60; text.setText("占据很多屏的同一条回复"); text.setViewIdResourceName("test:id/model_response");
         shadowOf(scroller).setOnPerformActionListener((action, args) -> {
             int next = page + (action == AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD ? -1 : 1);
-            if (next < 0 || next > 30) return false;
+            if (next < 0 || next > 60) return false;
             page = next; text.setText(page == 0 ? "最早的提问" : "占据很多屏的同一条回复");
+            text.setViewIdResourceName(page == 0 ? "test:id/user_query" : "test:id/model_response");
             AccessibilityEvent event = AccessibilityEvent.obtain(AccessibilityEvent.TYPE_VIEW_SCROLLED);
-            event.setPackageName("com.google.android.apps.bard"); event.setScrollY(page * 800); event.setMaxScrollY(24000);
+            event.setPackageName("com.google.android.apps.bard"); event.setScrollY(0); event.setScrollDeltaY(-800); event.setMaxScrollY(0);
             service.onAccessibilityEvent(event); return true;
         });
         service.scan(); advance(60);
@@ -146,7 +147,141 @@ public class NavigatorServiceTest {
         service.copyDiagnostics();
         android.content.ClipboardManager clipboard = (android.content.ClipboardManager) service.getSystemService(Context.CLIPBOARD_SERVICE);
         String report = clipboard.getPrimaryClip().getItemAt(0).getText().toString();
-        assertTrue(report.contains("readableEntries=")); assertTrue(report.contains("textChars="));
+        assertTrue(report.contains("userPrompts=")); assertTrue(report.contains("textChars="));
         assertFalse(report.contains("私人提问")); assertFalse(report.contains("私人描述"));
+    }
+
+    private void nativeRow(int row) {
+        page = row;
+        text.setCollectionItemInfo(AccessibilityNodeInfo.CollectionItemInfo.obtain(row, 1, 0, 1, false));
+        text.setViewIdResourceName("test:id/assistant_robin_content_message_container");
+        boolean user = row % 2 == 0;
+        text.setBoundsInScreen(user ? new Rect(300, 220, 1020, 470) : new Rect(60, 180, 1020, 1680));
+        text.setText(user ? (row == 10 || row == 100 ? "继续" : "提问 " + row / 2) : "长回复".repeat(1500));
+    }
+    private void nativeHistory(int lastRow, boolean effective) {
+        scroller.setViewIdResourceName("test:id/assistant_robin_chat_history_list");
+        scroller.addAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_TO_POSITION);
+        nativeRow(lastRow);
+        shadowOf(scroller).setOnPerformActionListener((action, args) -> {
+            if (action == AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_TO_POSITION.getId()) {
+                if (effective) nativeRow(args.getInt(AccessibilityNodeInfo.ACTION_ARGUMENT_ROW_INT));
+                return true;
+            }
+            int next = page + (action == AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD ? -1 : 1);
+            if (next < 0 || next > lastRow) return false;
+            scrolls++; nativeRow(next); return true;
+        });
+    }
+    @Test public void sixtyTurnsStartingOnLongReplyUseRowsAndKeepRepeatedPromptsDistinct() {
+        nativeHistory(119, true);
+        service.scan(); advance(85);
+        assertFalse(ReflectionHelpers.<Boolean>getField(service, "working"));
+        assertEquals(60, index().entries().size()); assertEquals(0, page);
+        assertEquals("提问 0", index().entries().get(0).text());
+        assertEquals("提问 59", index().entries().get(59).text());
+        assertEquals(119, (int) ReflectionHelpers.<Integer>getField(service, "rowRequests"));
+        assertEquals("only a boundary probe; no paging through the long replies", 1,
+                (int) ReflectionHelpers.<Integer>getField(service, "pageRequests"));
+        List<ConversationIndex.Entry> repeated = index().search("继续");
+        assertEquals(2, repeated.size()); assertNotEquals(repeated.get(0).id(), repeated.get(1).id());
+        service.seek(repeated.get(1)); advance(3);
+        assertEquals(100, page); assertTrue(ReflectionHelpers.<String>getField(service, "outcome").startsWith("已定位"));
+        assertEquals(1, (int) ReflectionHelpers.<Integer>getField(service, "rowRequests"));
+    }
+    @Test public void acceptedButIneffectivePositionActionFallsBackToPaging() {
+        nativeHistory(9, false);
+        service.scan(); advance(25);
+        assertEquals(5, index().entries().size()); assertEquals(0, page);
+        assertTrue(scrolls > 0); assertFalse(ReflectionHelpers.<Boolean>getField(service, "working"));
+    }
+    @Test public void sameTextAtWrongRowCannotReportSuccessfulArrival() {
+        nativeHistory(100, false);
+        service.seek(new ConversationIndex.Entry(1, "继续", 10)); advance(1);
+        assertTrue(ReflectionHelpers.<Boolean>getField(service, "working"));
+        assertFalse(ReflectionHelpers.<String>getField(service, "outcome").startsWith("已定位"));
+    }
+    @Test public void changedContentAtTargetRowFailsInsteadOfClaimingSuccess() {
+        nativeHistory(19, true);
+        service.seek(new ConversationIndex.Entry(1, "旧文字", 4)); advance(5);
+        assertEquals(4, page);
+        assertFalse(ReflectionHelpers.<Boolean>getField(service, "working"));
+        assertTrue(ReflectionHelpers.<String>getField(service, "outcome").contains("内容已变化"));
+    }
+    @Test public void showOnScreenRequiresASecondVisibleMatch() {
+        nativeHistory(4, true);
+        shadowOf(text).setOnPerformActionListener((action, args) -> {
+            if (action == AccessibilityNodeInfo.AccessibilityAction.ACTION_SHOW_ON_SCREEN.getId()) text.setText("内容在定位时变化");
+            return true;
+        });
+        service.seek(new ConversationIndex.Entry(1, "提问 2", 4)); advance(5);
+        assertFalse(ReflectionHelpers.<String>getField(service, "outcome").startsWith("已定位"));
+    }
+    @Test public void staleScrollEventRowIsNotAppliedToDifferentContent() {
+        nativeHistory(6, true); text.setCollectionItemInfo(null);
+        AccessibilityEvent event = AccessibilityEvent.obtain(AccessibilityEvent.TYPE_VIEW_SCROLLED);
+        event.setPackageName("com.google.android.apps.bard"); shadowOf(event).setSourceNode(scroller);
+        event.setFromIndex(6); event.setToIndex(6); service.onAccessibilityEvent(event);
+        text.setText("另一个位置的提问");
+        ScreenReader.Snapshot snapshot = ReflectionHelpers.callInstanceMethod(service, "snapshot");
+        assertEquals(-1, snapshot.firstRow());
+    }
+
+    @Test public void nativeSingleRowScrollEventsProvideAnchorsWithoutCollectionItemInfo() {
+        nativeHistory(11, true); text.setCollectionItemInfo(null);
+        java.util.function.IntConsumer expose = row -> {
+            nativeRow(row); text.setCollectionItemInfo(null);
+            AccessibilityEvent event = AccessibilityEvent.obtain(AccessibilityEvent.TYPE_VIEW_SCROLLED);
+            event.setPackageName("com.google.android.apps.bard"); shadowOf(event).setSourceNode(scroller);
+            event.setFromIndex(row); event.setToIndex(row); service.onAccessibilityEvent(event);
+        };
+        shadowOf(scroller).setOnPerformActionListener((action, args) -> {
+            if (action == AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_TO_POSITION.getId()) {
+                expose.accept(args.getInt(AccessibilityNodeInfo.ACTION_ARGUMENT_ROW_INT)); return true;
+            }
+            if (action == AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD && page > 0) { expose.accept(page - 1); return true; }
+            return false;
+        });
+        service.scan(); advance(25);
+        assertEquals(6, index().entries().size());
+        assertTrue(index().entries().stream().allMatch(e -> e.row() >= 0));
+        assertEquals(0, page); assertFalse(ReflectionHelpers.<Boolean>getField(service, "working"));
+    }
+    @Test public void recycledUserRowWaitsForItsTextBeforeAdvancing() {
+        nativeHistory(5, true);
+        android.os.Handler loader = new android.os.Handler(Looper.getMainLooper());
+        shadowOf(scroller).setOnPerformActionListener((action, args) -> {
+            if (action != AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_TO_POSITION.getId()) return false;
+            int row = args.getInt(AccessibilityNodeInfo.ACTION_ARGUMENT_ROW_INT);
+            nativeRow(row);
+            if (row % 2 == 0) {
+                String content = text.getText().toString(); text.setText("");
+                loader.postDelayed(() -> text.setText(content), 4200);
+            }
+            return true;
+        });
+        service.scan(); advance(35);
+        assertEquals(3, index().entries().size()); assertEquals("提问 0", index().entries().get(0).text());
+    }
+    @Test public void changedRowIdentityInvalidatesDirectoryInsteadOfMixingHistories() {
+        nativeHistory(4, true); index().putAtRow(4, "列表改动前的提问");
+        service.scan(); advance(2);
+        assertTrue(index().entries().isEmpty());
+        assertFalse(ReflectionHelpers.<Boolean>getField(service, "working"));
+        assertTrue(ReflectionHelpers.<String>getField(service, "outcome").contains("旧目录已清空"));
+    }
+
+    @Test public void scrollEventsCannotReadRowsBeforeConsentOrFromUnapprovedGoogleHost() {
+        nativeHistory(6, true); text.setCollectionItemInfo(null);
+        AccessibilityEvent event = AccessibilityEvent.obtain(AccessibilityEvent.TYPE_VIEW_SCROLLED);
+        event.setPackageName("com.google.android.apps.bard"); shadowOf(event).setSourceNode(scroller);
+        event.setFromIndex(6); event.setToIndex(6);
+        service.getSharedPreferences("settings", Context.MODE_PRIVATE).edit().putBoolean("consent", false).commit();
+        service.onAccessibilityEvent(event);
+        assertEquals(-1, (int) ReflectionHelpers.<Integer>getField(service, "eventFirst"));
+        service.getSharedPreferences("settings", Context.MODE_PRIVATE).edit().putBoolean("consent", true).commit();
+        root.setPackageName("com.google.android.googlequicksearchbox"); event.setPackageName("com.google.android.googlequicksearchbox");
+        service.onAccessibilityEvent(event);
+        assertEquals(-1, (int) ReflectionHelpers.<Integer>getField(service, "eventFirst"));
     }
 }

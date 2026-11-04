@@ -28,7 +28,7 @@ public final class MainActivity extends Activity {
         });
         text(page, "GEMINI ANCHOR", 12, "#69806A");
         text(page, "长对话，有目录。", 30, "#29442F");
-        text(page, "为 Gemini 添加随手可翻的侧边栏。\n搜索已收录内容，点击回到前面的位置。", 16, "#647663");
+        text(page, "为 Gemini 添加随手可翻的侧边栏。\n搜索用户发言，点击回到前面的位置。", 16, "#647663");
         state = text(page, "", 14, "#41684A");
         text(page, "01  开启目录服务", 19, "#29442F");
         text(page, "插件通过无障碍服务读取 Gemini 当前可见文字，在你点击「收录前文」或目录项时滚动对话。无需 Root，也不会修改 Gemini。", 14, "#647663");
@@ -41,10 +41,10 @@ public final class MainActivity extends Activity {
                     startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));
                 }).show());
         text(page, "02  在 Gemini 中收录", 19, "#29442F");
-        text(page, "打开对话 → 点击右侧「目录」→「收录前文」。插件会逐屏向上收录，等候历史加载，再尝试返回起点。尚有遗漏或中途停止时点「继续收录」，已有目录会保留。搜索并点条目即可定位；自动滚动时点「停止」可随时中止。", 14, "#647663");
+        text(page, "打开对话末尾 → 点击右侧「目录」→「收录前文」。只收录你的发言，跳过长回复。收录后停在前文，展开目录即可搜索定位；没有读完可点「继续收录」。自动滚动时点「停止」可随时中止。", 14, "#647663");
         button(page, "打开 Gemini", this::launchGemini);
         text(page, "03  切换对话时重新收录", 19, "#29442F");
-        text(page, "Android 不提供稳定的会话 ID。切换对话后请点「新对话 / 清空」，再收录，避免旧条目混入。目录优先按消息容器合并段落；页面未提供消息边界时仍会显示文字片段，可能包含回复。若仍拆分或漏收，可在目录底部复制不含对话的识别诊断。完全相同的文字只能定位到匹配位置。", 14, "#647663");
+        text(page, "切换对话后请点「新对话 / 清空」，再收录，避免旧条目混入。目录识别你的右侧气泡或明确标记的用户发言，并合并同一条发言的段落；不能确认的内容会跳过。若遗漏右侧发言，停在该气泡处复制识别诊断。没有位置标记时，重复发言可能合并，定位只能找到匹配文字。", 14, "#647663");
         Switch googleHost = new Switch(this);
         googleHost.setText("兼容由 Google App 承载的 Gemini");
         googleHost.setTextColor(Color.parseColor("#29442F")); googleHost.setTextSize(14);
@@ -72,7 +72,7 @@ public final class MainActivity extends Activity {
     }
     @Override protected void onResume() { super.onResume(); refreshState(); }
     private void refreshState() {
-        state.setText(NavigatorService.current == null ? "○ 服务未开启" : "● 服务已连接 · 打开 Gemini 即可使用");
+        state.setText(NavigatorService.current == null ? "○ 服务未开启 · " + BuildConfig.VERSION_NAME : "● 服务已连接 · " + BuildConfig.VERSION_NAME);
     }
     private void launchGemini() {
         Intent launch = getPackageManager().getLaunchIntentForPackage("com.google.android.apps.bard");

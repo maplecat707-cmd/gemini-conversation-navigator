@@ -43,4 +43,15 @@ public class ConversationIndexTest {
         index.merge(List.of("一段"), 1); index.merge(List.of(), -1);
         assertEquals(List.of("一段"), texts(index));
     }
+
+    @Test public void rowAnchorsSortAndPreserveSeparateRepeatedPrompts() {
+        ConversationIndex index = new ConversationIndex();
+        index.putAtRow(8, "继续"); index.putAtRow(2, "继续"); index.putAtRow(4, "中间");
+        assertEquals(List.of("继续", "中间", "继续"), texts(index));
+        assertNotEquals(index.entries().get(0).id(), index.entries().get(2).id());
+        long id = index.entries().get(0).id(); index.putAtRow(2, "继续");
+        assertEquals(3, index.entries().size()); assertEquals(id, index.entries().get(0).id());
+        index.putAtRow(2, "更新后内容"); assertNotEquals(id, index.entries().get(0).id());
+        assertEquals(3, index.entries().size());
+    }
 }

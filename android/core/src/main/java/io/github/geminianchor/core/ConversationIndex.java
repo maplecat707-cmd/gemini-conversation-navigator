@@ -7,7 +7,9 @@ import java.util.Locale;
 
 /** Ordered, memory-only index. Overlap merges preserve repeated identical turns. */
 public final class ConversationIndex {
-    public record Entry(long id, String text) {}
+    public record Entry(long id, String text, int row) {
+        public Entry(long id, String text) { this(id, text, -1); }
+    }
     private final List<Entry> entries = new ArrayList<>();
     private long nextId;
     public static String normalize(String value) {
@@ -15,6 +17,20 @@ public final class ConversationIndex {
     }
     public List<Entry> entries() { return Collections.unmodifiableList(entries); }
     public void clear() { entries.clear(); }
+    /** A RecyclerView row identifies repeated identical prompts without text guessing. */
+    public void putAtRow(int row, String raw) {
+        String text = normalize(raw);
+        if (row < 0 || text.isEmpty()) return;
+        for (int i = 0; i < entries.size(); i++) {
+            Entry old = entries.get(i);
+            if (old.row() == row) {
+                if (!old.text().equals(text)) entries.set(i, new Entry(nextId++, text, row));
+                return;
+            }
+        }
+        entries.add(new Entry(nextId++, text, row));
+        entries.sort(java.util.Comparator.comparingInt(Entry::row));
+    }
     public List<Entry> search(String query) {
         String needle = normalize(query).toLowerCase(Locale.ROOT);
         return entries.stream().filter(e -> e.text().toLowerCase(Locale.ROOT).contains(needle)).collect(java.util.stream.Collectors.toList());

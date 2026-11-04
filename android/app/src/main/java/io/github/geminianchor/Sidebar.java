@@ -31,7 +31,7 @@ final class Sidebar {
     private EditText search;
     private Button scanButton;
     private boolean expanded, busy;
-    private String message = "打开目录后，点「收录前文」建立索引。";
+    private String message = "点「收录前文」，收录右侧用户发言。";
     Sidebar(Context context, ConversationIndex index, Runnable scan, Runnable stop, Runnable clear, Runnable diagnostics, Consumer<ConversationIndex.Entry> seek) {
         this.context = context; this.index = index; this.scan = scan; this.stop = stop; this.clear = clear; this.diagnostics = diagnostics; this.seek = seek;
         manager = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
@@ -75,9 +75,9 @@ final class Sidebar {
         panel.setPadding(dp(16), dp(18), dp(16), dp(12)); panel.setBackground(background("#F8FAF6", 22));
         TextView brand = label("GEMINI ANCHOR", 11); brand.setTextColor(Color.parseColor("#74856C")); panel.addView(brand);
         LinearLayout heading = new LinearLayout(context);
-        TextView title = label("对话目录", 25); heading.addView(title, new LinearLayout.LayoutParams(0, dp(55), 1));
+        TextView title = label("用户发言目录", 25); heading.addView(title, new LinearLayout.LayoutParams(0, dp(55), 1));
         Button close = button("×", this::collapse); close.setContentDescription("收起目录"); heading.addView(close, new LinearLayout.LayoutParams(dp(52), dp(48))); panel.addView(heading);
-        search = new EditText(context); search.setSingleLine(); search.setTextSize(14); search.setHint("搜索已收录内容…");
+        search = new EditText(context); search.setSingleLine(); search.setTextSize(14); search.setHint("搜索用户发言…");
         search.setContentDescription("搜索对话目录"); search.setTextColor(Color.parseColor("#29442F")); panel.addView(search);
         search.addTextChangedListener(new TextWatcher() {
             public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
@@ -117,8 +117,8 @@ final class Sidebar {
         items.removeAllViews();
         String query = search.getText().toString();
         var filtered = index.search(query);
-        count.setText(filtered.size() + " / " + index.entries().size() + " 条 · 按收录顺序");
-        if (filtered.isEmpty()) items.addView(label(index.entries().isEmpty() ? "点「收录前文」，把前面的内容放进目录。\n切换对话后请先清空。" : "没有找到内容，试试更短的关键词。", 14));
+        count.setText(filtered.size() + " / " + index.entries().size() + " 条用户发言 · 按对话顺序");
+        if (filtered.isEmpty()) items.addView(label(index.entries().isEmpty() ? "点「收录前文」，把前面的用户发言放进目录。\n切换对话后请先清空。" : "没有找到内容，试试更短的关键词。", 14));
         for (ConversationIndex.Entry entry : filtered) {
             int ordinal = index.entries().indexOf(entry) + 1;
             Button row = button(String.format(java.util.Locale.ROOT, "%02d  %s", ordinal, entry.text()), () -> seek.accept(entry));
