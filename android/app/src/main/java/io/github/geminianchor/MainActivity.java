@@ -41,10 +41,10 @@ public final class MainActivity extends Activity {
                     startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));
                 }).show());
         text(page, "02  在 Gemini 中收录", 19, "#29442F");
-        text(page, "打开对话 → 点击右侧「目录」→「收录前文」。插件会逐屏向上收录文字，完成后尝试返回起点。搜索关键词并点条目即可定位；自动滚动时点「停止」可随时中止。", 14, "#647663");
+        text(page, "打开对话 → 点击右侧「目录」→「收录前文」。插件会逐屏向上收录，等候历史加载，再尝试返回起点。尚有遗漏或中途停止时点「继续收录」，已有目录会保留。搜索并点条目即可定位；自动滚动时点「停止」可随时中止。", 14, "#647663");
         button(page, "打开 Gemini", this::launchGemini);
         text(page, "03  切换对话时重新收录", 19, "#29442F");
-        text(page, "Android 不提供稳定的会话 ID。切换对话后请点「新对话 / 清空」，再收录，避免旧条目混入。目录按可读取的文字段落排列，可能同时包含提问和回复；完全相同的文字只能定位到匹配位置。", 14, "#647663");
+        text(page, "Android 不提供稳定的会话 ID。切换对话后请点「新对话 / 清空」，再收录，避免旧条目混入。目录优先按消息容器合并段落；页面未提供消息边界时仍会显示文字片段，可能包含回复。若仍拆分或漏收，可在目录底部复制不含对话的识别诊断。完全相同的文字只能定位到匹配位置。", 14, "#647663");
         Switch googleHost = new Switch(this);
         googleHost.setText("兼容由 Google App 承载的 Gemini");
         googleHost.setTextColor(Color.parseColor("#29442F")); googleHost.setTextSize(14);

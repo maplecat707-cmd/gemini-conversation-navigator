@@ -50,4 +50,35 @@ public class ScreenReaderTest {
         assertFalse(ScreenReader.allowed(root, false)); assertTrue(ScreenReader.allowed(root, true));
         root.setText("Google 搜索"); assertFalse(ScreenReader.allowed(root, true));
     }
+    @Test public void paragraphsWithinOneMessageAreOneDirectoryEntry() {
+        AccessibilityNodeInfo root = node(null, "ScrollView", 0, 1800); root.setScrollable(true);
+        AccessibilityNodeInfo message = node(null, "ViewGroup", 200, 700);
+        message.setViewIdResourceName("com.google.android.apps.bard:id/user_query");
+        shadowOf(message).addChild(node("一个很长的问题，第一段。", "TextView", 220, 180));
+        shadowOf(message).addChild(node("还是同一个问题，第二段。", "TextView", 420, 180));
+        shadowOf(message).addChild(node("复制", "Button", 800, 60));
+        shadowOf(root).addChild(message);
+        AccessibilityNodeInfo next = node("另一条问题", "TextView", 1000, 100);
+        next.setViewIdResourceName("com.google.android.apps.bard:id/user_query");
+        shadowOf(root).addChild(next);
+        assertEquals(java.util.List.of("一个很长的问题，第一段。 还是同一个问题，第二段。", "另一条问题"), ScreenReader.read(root).texts());
+    }
+    @Test public void messageParentDoesNotHideDifferentChildText() {
+        AccessibilityNodeInfo root = node(null, "ScrollView", 0, 1800); root.setScrollable(true);
+        AccessibilityNodeInfo message = node("问题第一段", "ViewGroup", 200, 600);
+        message.setCollectionItemInfo(AccessibilityNodeInfo.CollectionItemInfo.obtain(0, 1, 0, 1, false));
+        shadowOf(message).addChild(node("问题第一段", "TextView", 220, 100));
+        shadowOf(message).addChild(node("问题第二段", "TextView", 380, 100));
+        shadowOf(root).addChild(message);
+        assertEquals(java.util.List.of("问题第一段 问题第二段"), ScreenReader.read(root).texts());
+    }
+    @Test public void supportsDescriptionOnlyMessageWithoutIndexingActionLabels() {
+        AccessibilityNodeInfo root = node(null, "ScrollView", 0, 1800); root.setScrollable(true);
+        AccessibilityNodeInfo message = node(null, "TextView", 200, 600);
+        message.setContentDescription("通过无障碍描述暴露的完整提问");
+        shadowOf(root).addChild(message);
+        AccessibilityNodeInfo action = node(null, "ImageButton", 820, 60); action.setContentDescription("复制提问");
+        shadowOf(root).addChild(action);
+        assertEquals(java.util.List.of("通过无障碍描述暴露的完整提问"), ScreenReader.read(root).texts());
+    }
 }

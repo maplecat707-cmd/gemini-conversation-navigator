@@ -23,7 +23,7 @@ final class Sidebar {
     private final Context context;
     private final WindowManager manager;
     private final ConversationIndex index;
-    private final Runnable scan, stop, clear;
+    private final Runnable scan, stop, clear, diagnostics;
     private final Consumer<ConversationIndex.Entry> seek;
     private View root;
     private TextView status, count;
@@ -32,8 +32,8 @@ final class Sidebar {
     private Button scanButton;
     private boolean expanded, busy;
     private String message = "打开目录后，点「收录前文」建立索引。";
-    Sidebar(Context context, ConversationIndex index, Runnable scan, Runnable stop, Runnable clear, Consumer<ConversationIndex.Entry> seek) {
-        this.context = context; this.index = index; this.scan = scan; this.stop = stop; this.clear = clear; this.seek = seek;
+    Sidebar(Context context, ConversationIndex index, Runnable scan, Runnable stop, Runnable clear, Runnable diagnostics, Consumer<ConversationIndex.Entry> seek) {
+        this.context = context; this.index = index; this.scan = scan; this.stop = stop; this.clear = clear; this.diagnostics = diagnostics; this.seek = seek;
         manager = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
     }
     private int dp(int value) { return Math.round(value * context.getResources().getDisplayMetrics().density); }
@@ -85,13 +85,14 @@ final class Sidebar {
             public void afterTextChanged(Editable text) {}
         });
         LinearLayout actions = new LinearLayout(context);
-        scanButton = button(busy ? "停止" : "收录前文", () -> { if (busy) stop.run(); else scan.run(); });
+        scanButton = button(scanTitle(), () -> { if (busy) stop.run(); else scan.run(); });
         actions.addView(scanButton, new LinearLayout.LayoutParams(0, dp(50), 1));
         actions.addView(button("新对话 / 清空", clear), new LinearLayout.LayoutParams(0, dp(50), 1)); panel.addView(actions);
         count = label("", 12); panel.addView(count);
         ScrollView scroll = new ScrollView(context); items = new LinearLayout(context); items.setOrientation(LinearLayout.VERTICAL); scroll.addView(items);
         panel.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
         status = label(message, 12); status.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE); panel.addView(status);
+        panel.addView(button("复制识别诊断（不含对话）", diagnostics));
         panel.addView(label("仅在本机 · 目录只保留在内存", 10));
         panel.setFocusableInTouchMode(true); panel.requestFocus();
         panel.setOnKeyListener((v, key, event) -> { if (key == KeyEvent.KEYCODE_BACK && event.getAction() == KeyEvent.ACTION_UP) { collapse(); return true; } return false; });
@@ -107,15 +108,16 @@ final class Sidebar {
     void message(String value) { message = value; if (status != null) status.setText(value); }
     void busy(boolean value) {
         busy = value;
-        if (expanded) { if (scanButton != null) scanButton.setText(value ? "停止" : "收录前文"); }
+        if (expanded) { if (scanButton != null) scanButton.setText(scanTitle()); }
         else if (root != null) { hide(); bubble(); }
     }
     void render() {
         if (items == null) return;
+        scanButton.setText(scanTitle());
         items.removeAllViews();
         String query = search.getText().toString();
         var filtered = index.search(query);
-        count.setText(filtered.size() + " / " + index.entries().size() + " 段 · 按收录顺序");
+        count.setText(filtered.size() + " / " + index.entries().size() + " 条 · 按收录顺序");
         if (filtered.isEmpty()) items.addView(label(index.entries().isEmpty() ? "点「收录前文」，把前面的内容放进目录。\n切换对话后请先清空。" : "没有找到内容，试试更短的关键词。", 14));
         for (ConversationIndex.Entry entry : filtered) {
             int ordinal = index.entries().indexOf(entry) + 1;
@@ -127,4 +129,5 @@ final class Sidebar {
             items.addView(row, params);
         }
     }
+    private String scanTitle() { return busy ? "停止" : index.entries().isEmpty() ? "收录前文" : "继续收录"; }
 }

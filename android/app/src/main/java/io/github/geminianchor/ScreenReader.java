@@ -48,17 +48,83 @@ final class ScreenReader {
         for (int i = 0; i < node.getChildCount(); i++) findScrollers(node.getChild(i), result, depth + 1);
     }
     private static void collect(AccessibilityNodeInfo node, List<Block> result, int depth) {
-        if (node == null || depth > 45 || !node.isVisibleToUser() || node.isEditable() || node.isPassword()) return;
+        if (excluded(node, depth)) return;
+        List<Block> children = new ArrayList<>();
+        for (int i = 0; i < node.getChildCount(); i++) collect(node.getChild(i), children, depth + 1);
+        String text = ConversationIndex.normalize(node.getText() == null ? "" : node.getText().toString());
+        // Some native/Compose messages expose their text only as a description.
+        // Do not turn a clickable icon's accessibility label into conversation text.
+        boolean readableDescription = String.valueOf(node.getClassName()).endsWith("TextView")
+                || messageBoundary(node) || (!node.isClickable() && !node.isLongClickable());
+        if (text.isEmpty() && children.isEmpty() && readableDescription) {
+            text = ConversationIndex.normalize(node.getContentDescription() == null ? "" : node.getContentDescription().toString());
+        }
+        Rect bounds = new Rect(); node.getBoundsInScreen(bounds);
+        String descendants = ConversationIndex.normalize(String.join(" ", children.stream().map(Block::text).collect(java.util.stream.Collectors.toList())));
+        if (!text.isEmpty() && !bounds.isEmpty()) {
+            if (descendants.isEmpty() || !descendants.contains(text)) {
+                // A parent may repeat the complete text, or only expose its first
+                // paragraph. Preserve different child content in the latter case.
+                if (!descendants.isEmpty() && text.contains(descendants)) children.clear();
+                children.add(0, new Block(text, bounds, node));
+            }
+        }
+        if (messageBoundary(node) && !children.isEmpty()) {
+            String joined = ConversationIndex.normalize(String.join(" ", children.stream().map(Block::text).collect(java.util.stream.Collectors.toList())));
+            if (bounds.isEmpty()) children.forEach(block -> bounds.union(block.bounds()));
+            result.add(new Block(joined, bounds, node));
+        } else result.addAll(children);
+    }
+    private static boolean excluded(AccessibilityNodeInfo node, int depth) {
+        if (node == null || depth > 45 || !node.isVisibleToUser() || node.isEditable() || node.isPassword()) return true;
         String clazz = String.valueOf(node.getClassName());
         String id = String.valueOf(node.getViewIdResourceName()).toLowerCase(Locale.ROOT);
-        if (clazz.contains("Button") || clazz.contains("EditText") || id.contains("toolbar") || id.contains("navigation") || id.contains("input")) return;
-        String text = ConversationIndex.normalize(node.getText() == null ? "" : node.getText().toString());
-        if (!text.isEmpty()) {
-            Rect bounds = new Rect(); node.getBoundsInScreen(bounds);
-            if (!bounds.isEmpty()) result.add(new Block(text, bounds, node));
-            return; // A parent can expose the same text as its children.
+        return clazz.contains("Button") || clazz.contains("EditText") || node.isCheckable()
+                || id.contains("toolbar") || id.contains("navigation") || id.contains("input");
+    }
+    private static boolean messageBoundary(AccessibilityNodeInfo node) {
+        if (node.isScrollable()) return false;
+        if (node.getCollectionItemInfo() != null) return true;
+        String id = String.valueOf(node.getViewIdResourceName()).toLowerCase(Locale.ROOT).replace('-', '_');
+        String clazz = String.valueOf(node.getClassName()).toLowerCase(Locale.ROOT).replace('-', '_');
+        return id.matches(".*(?:[:/_])(?:user_query|user_message|model_response|assistant_message|message_content|message_bubble|chat_turn|conversation_turn)(?:_container)?$")
+                || clazz.equals("user_query") || clazz.equals("model_response");
+    }
+    static boolean scroll(AccessibilityNodeInfo node, int direction) {
+        int primary = direction < 0 ? AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD : AccessibilityNodeInfo.ACTION_SCROLL_FORWARD;
+        int alternative = direction < 0 ? AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_UP.getId()
+                : AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_DOWN.getId();
+        if (node.performAction(primary)) return true;
+        return node.getActionList().stream().anyMatch(action -> action.getId() == alternative) && node.performAction(alternative);
+    }
+    static String diagnostics(AccessibilityNodeInfo root) {
+        Snapshot screen = read(root);
+        StringBuilder report = new StringBuilder("Gemini Anchor node structure (no conversation text)\n");
+        report.append("readableEntries=").append(screen.blocks().size()).append("\n");
+        if (screen.scroller() == null) return report.append("scrollContainer=not-found\n").toString();
+        appendStructure(screen.scroller(), report, 0, new int[]{0});
+        return report.toString();
+    }
+    private static void appendStructure(AccessibilityNodeInfo node, StringBuilder report, int depth, int[] count) {
+        if (node == null || depth > 45 || count[0] >= 160) return;
+        int ordinal = count[0]++;
+        Rect bounds = new Rect(); node.getBoundsInScreen(bounds);
+        String id = String.valueOf(node.getViewIdResourceName());
+        // Include only conventional resource identifiers, never dynamic web IDs.
+        if (!id.matches("[a-zA-Z0-9_.]+:id/[a-zA-Z_][a-zA-Z0-9_]*")) id = "-";
+        String clazz = String.valueOf(node.getClassName());
+        if (!clazz.matches("[a-zA-Z0-9_.$]+")) clazz = "custom";
+        report.append(ordinal).append(" depth=").append(depth).append(" class=").append(clazz)
+                .append(" id=").append(id).append(" children=").append(node.getChildCount())
+                .append(" textChars=").append(node.getText() == null ? 0 : node.getText().length())
+                .append(" descriptionChars=").append(node.getContentDescription() == null ? 0 : node.getContentDescription().length())
+                .append(" visible=").append(node.isVisibleToUser()).append(" message=").append(messageBoundary(node))
+                .append(" scrollable=").append(node.isScrollable()).append(" bounds=").append(bounds.toShortString())
+                .append(" actions=").append(node.getActionList().stream().map(a -> String.valueOf(a.getId())).collect(java.util.stream.Collectors.joining(","))).append("\n");
+        // Do not inspect input/password subtrees even for diagnostics.
+        if (!node.isEditable() && !node.isPassword()) {
+            for (int i = 0; i < node.getChildCount(); i++) appendStructure(node.getChild(i), report, depth + 1, count);
         }
-        // Content descriptions are usually button labels, not conversation text.
-        for (int i = 0; i < node.getChildCount(); i++) collect(node.getChild(i), result, depth + 1);
+        if (depth == 0 && count[0] >= 160) report.append("truncatedAt=160 nodes\n");
     }
 }

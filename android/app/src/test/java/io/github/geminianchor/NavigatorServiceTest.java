@@ -86,4 +86,67 @@ public class NavigatorServiceTest {
         assertFalse(ReflectionHelpers.<Boolean>getField(service, "working"));
         int actions = scrolls; advance(20); assertEquals(actions, scrolls);
     }
+    @Test public void supportsDirectionalScrollActionsWhenForwardBackwardAreRejected() {
+        scroller.addAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_UP);
+        scroller.addAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_DOWN);
+        shadowOf(scroller).setOnPerformActionListener((action, args) -> {
+            int next = page;
+            if (action == AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_UP.getId()) next--;
+            if (action == AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_DOWN.getId()) next++;
+            if (next < 0 || next > 9 || next == page) return false;
+            page = next; scrolls++; text.setText("段落 " + page); return true;
+        });
+        service.scan(); advance(45);
+        assertEquals(10, index().entries().size());
+        assertEquals(9, page);
+    }
+    @Test public void historyTakingSeveralSecondsToLoadIsNotTreatedAsTheBeginning() {
+        final boolean[] pending = {false};
+        android.os.Handler loader = new android.os.Handler(Looper.getMainLooper());
+        shadowOf(scroller).setOnPerformActionListener((action, args) -> {
+            if (pending[0]) return false;
+            int delta = action == AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD ? -1
+                    : action == AccessibilityNodeInfo.ACTION_SCROLL_FORWARD ? 1 : 0;
+            int next = page + delta;
+            if (next < 0 || next > 9 || next == page) return false;
+            pending[0] = true;
+            loader.postDelayed(() -> { page = next; scrolls++; text.setText("段落 " + page); pending[0] = false; }, 4200);
+            return true;
+        });
+        service.scan(); advance(120);
+        assertEquals(10, index().entries().size());
+        assertEquals(9, page);
+    }
+    @Test public void continuingAScanPreservesAlreadyCollectedLaterMessages() {
+        service.scan(); advance(2); service.cancel();
+        long lastId = index().entries().get(index().entries().size() - 1).id();
+        int resumeFrom = page;
+        service.scan(); advance(35);
+        assertEquals(10, index().entries().size());
+        assertEquals("段落 9", index().entries().get(9).text());
+        assertEquals(lastId, index().entries().get(9).id());
+        assertEquals(resumeFrom, page);
+    }
+    @Test public void scrollEventsKeepScanningThroughALongUnchangedMessage() {
+        page = 30; text.setText("占据很多屏的同一条回复");
+        shadowOf(scroller).setOnPerformActionListener((action, args) -> {
+            int next = page + (action == AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD ? -1 : 1);
+            if (next < 0 || next > 30) return false;
+            page = next; text.setText(page == 0 ? "最早的提问" : "占据很多屏的同一条回复");
+            AccessibilityEvent event = AccessibilityEvent.obtain(AccessibilityEvent.TYPE_VIEW_SCROLLED);
+            event.setPackageName("com.google.android.apps.bard"); event.setScrollY(page * 800); event.setMaxScrollY(24000);
+            service.onAccessibilityEvent(event); return true;
+        });
+        service.scan(); advance(60);
+        assertEquals("最早的提问", index().entries().get(0).text());
+        assertFalse(ReflectionHelpers.<Boolean>getField(service, "working"));
+    }
+    @Test public void diagnosticClipboardContainsStructureButNoConversation() {
+        text.setText("私人提问不应出现在诊断中"); text.setContentDescription("私人描述也不能出现");
+        service.copyDiagnostics();
+        android.content.ClipboardManager clipboard = (android.content.ClipboardManager) service.getSystemService(Context.CLIPBOARD_SERVICE);
+        String report = clipboard.getPrimaryClip().getItemAt(0).getText().toString();
+        assertTrue(report.contains("readableEntries=")); assertTrue(report.contains("textChars="));
+        assertFalse(report.contains("私人提问")); assertFalse(report.contains("私人描述"));
+    }
 }
