@@ -54,4 +54,13 @@ public class ConversationIndexTest {
         index.putAtRow(2, "更新后内容"); assertNotEquals(id, index.entries().get(0).id());
         assertEquals(3, index.entries().size());
     }
+
+    @Test public void restoringDirectoryRetainsIdsAndAllocatesNewIdsAfterExistingOnes() {
+        ConversationIndex index = new ConversationIndex();
+        index.restore(List.of(new ConversationIndex.Entry(40, "继续", 2), new ConversationIndex.Entry(41, "继续", 8)));
+        index.putAtRow(0, "更早的问题");
+        assertEquals(42, index.entries().get(0).id());
+        assertEquals(40, index.entries().get(1).id());
+        assertEquals(41, index.entries().get(2).id());
+    }
 }

@@ -73,13 +73,13 @@ public class NavigatorServiceTest {
         assertEquals(position, page); assertEquals(actions, scrolls); assertEquals(count, index().entries().size());
         assertTrue(count > 0 && count < 10);
     }
-    @Test public void leavingGeminiStopsScrollingAndClearsPrivateText() {
+    @Test public void leavingGeminiStopsScrollingAndKeepsDirectoryForResume() {
         service.scan(); advance(2);
         root.setPackageName("org.example.other");
         AccessibilityEvent event = AccessibilityEvent.obtain(AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED);
         event.setPackageName("org.example.other"); service.onAccessibilityEvent(event); advance(1);
         int actions = scrolls; advance(10);
-        assertTrue(index().entries().isEmpty()); assertEquals(actions, scrolls);
+        assertFalse(index().entries().isEmpty()); assertEquals(actions, scrolls);
         assertFalse(ReflectionHelpers.<Boolean>getField(service, "working"));
     }
     @Test public void missingTargetStopsAtBoundsInsteadOfScrollingForever() {
@@ -121,7 +121,7 @@ public class NavigatorServiceTest {
     @Test public void continuingAScanPreservesAlreadyCollectedLaterMessages() {
         service.scan(); advance(2); service.cancel();
         long lastId = index().entries().get(index().entries().size() - 1).id();
-                service.scan(); advance(35);
+        service.scan(); advance(35);
         assertEquals(10, index().entries().size());
         assertEquals("段落 9", index().entries().get(9).text());
         assertEquals(lastId, index().entries().get(9).id());
@@ -263,12 +263,12 @@ public class NavigatorServiceTest {
         service.scan(); advance(35);
         assertEquals(3, index().entries().size()); assertEquals("提问 0", index().entries().get(0).text());
     }
-    @Test public void changedRowIdentityInvalidatesDirectoryInsteadOfMixingHistories() {
+    @Test public void changedRowIdentityPreservesSavedDirectoryInsteadOfMixingHistories() {
         nativeHistory(4, true); index().putAtRow(4, "列表改动前的提问");
-        service.scan(); advance(2);
-        assertTrue(index().entries().isEmpty());
+        service.startScanHere(); advance(2);
+        assertEquals("列表改动前的提问", index().entries().get(0).text());
         assertFalse(ReflectionHelpers.<Boolean>getField(service, "working"));
-        assertTrue(ReflectionHelpers.<String>getField(service, "outcome").contains("旧目录已清空"));
+        assertTrue(ReflectionHelpers.<String>getField(service, "outcome").contains("已保留原记忆"));
     }
 
     @Test public void scrollEventsCannotReadRowsBeforeConsentOrFromUnapprovedGoogleHost() {
@@ -283,5 +283,200 @@ public class NavigatorServiceTest {
         root.setPackageName("com.google.android.googlequicksearchbox"); event.setPackageName("com.google.android.googlequicksearchbox");
         service.onAccessibilityEvent(event);
         assertEquals(-1, (int) ReflectionHelpers.<Integer>getField(service, "eventFirst"));
+    }
+
+    private void awaitSave() throws Exception {
+        java.util.concurrent.Future<Boolean> save = ReflectionHelpers.getField(service, "pendingSave");
+        if (save != null) assertTrue(save.get(5, java.util.concurrent.TimeUnit.SECONDS));
+    }
+    private void restartService() {
+        service.onDestroy();
+        service = Robolectric.buildService(NavigatorService.class).create().get();
+        AccessibilityWindowInfo window = AccessibilityWindowInfo.obtain();
+        shadowOf(window).setType(AccessibilityWindowInfo.TYPE_APPLICATION);
+        shadowOf(window).setRoot(root); shadowOf(window).setLayer(1);
+        shadowOf(service).setWindows(List.of(window)); service.onServiceConnected();
+    }
+    @Test public void savedScanResumesAfterServiceRestartWithoutRereadingLaterRows() throws Exception {
+        nativeHistory(119, true); service.enableMemory();
+        service.scan(); advance(3); service.cancel(); awaitSave();
+        List<ConversationIndex.Entry> saved = List.copyOf(index().entries());
+        assertTrue(saved.size() > 0 && saved.size() < 60);
+        int earliest = saved.get(0).row();
+        nativeRow(119); restartService();
+        assertEquals(saved, index().entries());
+        assertFalse(ReflectionHelpers.<Boolean>getField(service, "working"));
+        java.util.List<Integer> requested = new java.util.ArrayList<>();
+        shadowOf(scroller).setOnPerformActionListener((action, args) -> {
+            if (action == AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_TO_POSITION.getId()) {
+                int row = args.getInt(AccessibilityNodeInfo.ACTION_ARGUMENT_ROW_INT);
+                requested.add(row); nativeRow(row); return true;
+            }
+            return false;
+        });
+        service.scan(); advance(90); awaitSave();
+        assertEquals(earliest, (int) requested.get(0));
+        assertTrue(requested.stream().allMatch(row -> row <= earliest));
+        assertEquals(60, index().entries().size());
+        assertEquals(saved.get(saved.size() - 1), index().entries().get(59));
+        assertFalse(ReflectionHelpers.<Boolean>getField(service, "working"));
+    }
+    @Test public void separateConversationsSurviveRestartRenameSwitchAndDelete() throws Exception {
+        service.enableMemory(); service.createSession("旅行计划");
+        service.scan(); advance(30); awaitSave();
+        String first = service.activeSessionId(); List<ConversationIndex.Entry> firstEntries = List.copyOf(index().entries());
+        service.createSession("代码问题");
+        text.setText("另一个会话的提问");
+        shadowOf(scroller).setOnPerformActionListener((action, args) -> false);
+        service.scan(); advance(15); awaitSave();
+        String second = service.activeSessionId();
+        assertEquals(1, index().entries().size());
+        service.renameSession("代码排查"); awaitSave(); restartService();
+        assertEquals(second, service.activeSessionId()); assertEquals("代码排查", service.activeSessionTitle());
+        assertEquals("另一个会话的提问", index().entries().get(0).text());
+        service.selectSession(first); awaitSave();
+        assertEquals(firstEntries, index().entries());
+        service.deleteSession(); awaitSave(); restartService();
+        assertTrue(service.savedSessions().stream().noneMatch(s -> s.id().equals(first)));
+        service.selectSession(second);
+        assertEquals("另一个会话的提问", index().entries().get(0).text());
+    }
+    @Test public void wrongConversationDuringResumeDoesNotPolluteOrDeleteMemory() throws Exception {
+        nativeHistory(9, true); service.enableMemory(); service.scan(); advance(25); awaitSave();
+        List<ConversationIndex.Entry> saved = List.copyOf(index().entries());
+        nativeRow(9);
+        shadowOf(scroller).setOnPerformActionListener((action, args) -> {
+            if (action == AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_TO_POSITION.getId()) {
+                nativeRow(args.getInt(AccessibilityNodeInfo.ACTION_ARGUMENT_ROW_INT)); text.setText("另一段会话");
+                return true;
+            }
+            return false;
+        });
+        service.scan(); advance(5);
+        assertFalse(ReflectionHelpers.<Boolean>getField(service, "working"));
+        assertEquals(saved, index().entries());
+        assertTrue(ReflectionHelpers.<String>getField(service, "outcome").contains("已保留记忆"));
+        restartService(); assertEquals(saved, index().entries());
+    }
+    @Test public void cancellationDuringResumeNeverContinuesToScan() {
+        nativeHistory(19, true); index().putAtRow(0, "提问 0");
+        service.scan(); advance(1); service.cancel();
+        int position = page; advance(30);
+        assertEquals(position, page); assertFalse(ReflectionHelpers.<Boolean>getField(service, "working"));
+    }
+    @Test public void memoryIsOptInAndDeletingEverythingCannotBeUndoneByQueuedSaves() throws Exception {
+        service.scan(); advance(2); service.cancel();
+        assertFalse(service.remembersSessions()); restartService();
+        assertTrue(index().entries().isEmpty());
+        service.enableMemory(); service.createSession("待删除");
+        service.scan(); advance(2); service.deleteAllMemory(); awaitSave();
+        restartService(); assertTrue(index().entries().isEmpty()); assertFalse(service.remembersSessions());
+        SessionStore disk = new SessionStore(service, true);
+        assertEquals(1, disk.sessions().size()); assertTrue(disk.active().entries().isEmpty());
+    }
+    @Test public void collectingAutomaticallyCheckpointsWithoutWaitingForStop() throws Exception {
+        nativeHistory(119, true); service.enableMemory(); service.scan(); advance(4); awaitSave();
+        assertTrue(ReflectionHelpers.<Boolean>getField(service, "working"));
+        SessionStore disk = new SessionStore(service, true);
+        assertTrue(disk.active().entries().size() > 0);
+        assertTrue(disk.active().entries().size() <= index().entries().size());
+        assertEquals("提问 59", disk.active().entries().get(disk.active().entries().size() - 1).text());
+    }
+
+    private android.widget.Button findButton(android.view.View view, String label) {
+        if (view instanceof android.widget.Button && ((android.widget.Button) view).getText().toString().equals(label)) return (android.widget.Button) view;
+        if (view instanceof android.view.ViewGroup) {
+            android.view.ViewGroup group = (android.view.ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                android.widget.Button found = findButton(group.getChildAt(i), label);
+                if (found != null) return found;
+            }
+        }
+        return null;
+    }
+    private android.widget.EditText findEditor(android.view.View view) {
+        if (view instanceof android.widget.EditText) return (android.widget.EditText) view;
+        if (view instanceof android.view.ViewGroup) {
+            android.view.ViewGroup group = (android.view.ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                android.widget.EditText found = findEditor(group.getChildAt(i)); if (found != null) return found;
+            }
+        }
+        return null;
+    }
+    @Test public void sidebarMemoryOptInAndSessionMenuAreUsable() throws Exception {
+        Sidebar sidebar = ReflectionHelpers.getField(service, "sidebar"); sidebar.open();
+        android.view.View panel = ReflectionHelpers.getField(sidebar, "root");
+        findButton(panel, "启用本机会话记忆").performClick();
+        android.app.AlertDialog consent = org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog();
+        assertTrue(consent.isShowing()); assertFalse(service.remembersSessions());
+        consent.getButton(android.content.DialogInterface.BUTTON_POSITIVE).performClick(); shadowOf(Looper.getMainLooper()).idle();
+        assertTrue(service.remembersSessions());
+        panel = ReflectionHelpers.getField(sidebar, "root"); findButton(panel, "会话").performClick();
+        android.app.AlertDialog menu = org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog();
+        shadowOf(menu).clickOnItem(0); shadowOf(Looper.getMainLooper()).idle();
+        android.app.AlertDialog editor = org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog();
+        findEditor(editor.getWindow().getDecorView()).setText("侧栏创建的会话");
+        editor.getButton(android.content.DialogInterface.BUTTON_POSITIVE).performClick(); shadowOf(Looper.getMainLooper()).idle(); awaitSave();
+        assertEquals("侧栏创建的会话", service.activeSessionTitle());
+        assertEquals(2, new SessionStore(service, true).sessions().size());
+        assertFalse(ReflectionHelpers.<Boolean>getField(service, "working"));
+    }
+
+    @Test public void unresponsiveGeminiReceivesFewerRequestsAndResumesFromSavedPrompt() throws Exception {
+        nativeHistory(19, true); service.enableMemory();
+        final boolean[] frozen = {true}; final int[] requests = {0};
+        shadowOf(scroller).setOnPerformActionListener((action, args) -> {
+            requests[0]++;
+            if (frozen[0]) return true;
+            if (action == AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_TO_POSITION.getId()) {
+                nativeRow(args.getInt(AccessibilityNodeInfo.ACTION_ARGUMENT_ROW_INT)); return true;
+            }
+            return false;
+        });
+        nativeRow(18); service.scan(); advance(20); awaitSave();
+        assertFalse(ReflectionHelpers.<Boolean>getField(service, "working"));
+        assertTrue("back off instead of repeatedly pushing a frozen app", requests[0] <= 14);
+        assertEquals(1, index().entries().size());
+        frozen[0] = false; nativeRow(19); restartService(); service.scan(); advance(30);
+        assertEquals(10, index().entries().size()); assertEquals(0, page);
+    }
+    @Test public void collectingNewerPromptsRetainsEarlierSavedHistory() throws Exception {
+        nativeHistory(9, true); service.enableMemory(); service.scan(); advance(25); awaitSave();
+        List<ConversationIndex.Entry> original = List.copyOf(index().entries());
+        nativeHistory(15, true); service.startScanHere(); advance(25); awaitSave();
+        assertEquals(8, index().entries().size());
+        assertEquals(original, index().entries().subList(0, 5));
+        assertEquals("提问 7", index().entries().get(7).text());
+        restartService(); assertEquals(8, index().entries().size());
+    }
+
+    @Test public void changingRowMetadataCannotDiscardEarlierOrLaterSavedPrompts() throws Exception {
+        nativeHistory(9, true); service.enableMemory(); service.scan(); advance(25); awaitSave();
+        List<ConversationIndex.Entry> saved = List.copyOf(index().entries());
+        nativeHistory(11, true); nativeRow(10); text.setCollectionItemInfo(null);
+        shadowOf(scroller).setOnPerformActionListener((action, args) -> false);
+        service.startScanHere(); advance(15); awaitSave();
+        assertEquals(6, index().entries().size());
+        for (ConversationIndex.Entry e : saved) assertTrue(index().entries().stream().anyMatch(current -> current.id() == e.id() && current.text().equals(e.text())));
+        nativeHistory(13, true); service.startScanHere(); advance(25); awaitSave();
+        assertEquals(7, index().entries().size());
+        restartService(); assertEquals(7, index().entries().size());
+        assertEquals("提问 0", index().entries().get(0).text());
+        assertEquals("继续", index().entries().get(5).text());
+        assertEquals("提问 6", index().entries().get(6).text());
+        assertTrue(index().entries().stream().allMatch(e -> e.row() < 0));
+    }
+
+    @Test public void supplementingTextOnlyHistoryKeepsNewerAndOlderPromptsInOrder() {
+        service.scan(); advance(30);
+        page = 12; text.setText("段落 12");
+        shadowOf(scroller).setOnPerformActionListener((action, args) -> {
+            if (action != AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD || page <= 0) return false;
+            text.setText("段落 " + --page); return true;
+        });
+        service.startScanHere(); advance(30);
+        assertEquals(13, index().entries().size());
+        for (int i = 0; i < 13; i++) assertEquals("段落 " + i, index().entries().get(i).text());
     }
 }

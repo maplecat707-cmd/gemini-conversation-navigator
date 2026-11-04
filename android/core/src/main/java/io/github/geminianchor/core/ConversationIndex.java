@@ -17,6 +17,11 @@ public final class ConversationIndex {
     }
     public List<Entry> entries() { return Collections.unmodifiableList(entries); }
     public void clear() { entries.clear(); }
+    /** Restore stable IDs so a saved directory still points at the same utterances. */
+    public void restore(List<Entry> saved) {
+        entries.clear(); entries.addAll(saved);
+        nextId = entries.stream().mapToLong(Entry::id).max().orElse(-1) + 1;
+    }
     /** A RecyclerView row identifies repeated identical prompts without text guessing. */
     public void putAtRow(int row, String raw) {
         String text = normalize(raw);
@@ -37,6 +42,10 @@ public final class ConversationIndex {
     }
     /** Merge contiguous viewport text; direction is -1 for earlier, +1 for later. */
     public void merge(List<String> raw, int direction) {
+        merge(raw, direction, direction < 0 ? 0 : entries.size());
+    }
+    /** Detached pages go before the previously observed page, or after saved history when supplementing. */
+    public void merge(List<String> raw, int direction, int detachedAt) {
         List<String> page = raw.stream().map(ConversationIndex::normalize).filter(s -> !s.isEmpty()).collect(java.util.stream.Collectors.toList());
         if (page.isEmpty()) return;
         if (entries.isEmpty()) { page.forEach(s -> entries.add(new Entry(nextId++, s))); return; }
@@ -55,7 +64,7 @@ public final class ConversationIndex {
         }
         if (best == 0) {
             List<Entry> additions = page.stream().map(s -> new Entry(nextId++, s)).collect(java.util.stream.Collectors.toList());
-            entries.addAll(direction < 0 ? 0 : entries.size(), additions);
+            entries.addAll(Math.max(0, Math.min(detachedAt, entries.size())), additions);
         } else {
             if (at == 0 && pageAt > 0) {
                 List<Entry> prefix = page.subList(0, pageAt).stream().map(s -> new Entry(nextId++, s)).collect(java.util.stream.Collectors.toList());

@@ -1,6 +1,6 @@
 {
   "name": "gemini-conversation-navigator",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "private": true,
   "description": "Local conversation navigation for Gemini on Android and Chrome/Edge",
   "scripts": {
